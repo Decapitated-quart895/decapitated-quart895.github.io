@@ -263,6 +263,7 @@
       <button type="button" class="io-btn" id="exportExcelBtn">⬇ Excel'e Aktar</button>
       <button type="button" class="io-btn" id="exportPdfBtn">⬇ PDF'e Aktar</button>
       <button type="button" class="io-btn" id="importExcelBtn">⬆ Excel'den Yükle</button>
+      <button type="button" class="io-btn" id="downloadTemplateBtn">📄 Şablonu İndir</button>
       <input type="file" id="importExcelInput" accept=".xlsx,.xls" style="display:none;">
     </div>
     <div class="io-msg" id="ioMsg"></div>
@@ -561,6 +562,22 @@
 
   document.getElementById('importExcelBtn').addEventListener('click', () => {
     document.getElementById('importExcelInput').click();
+  });
+
+  document.getElementById('downloadTemplateBtn').addEventListener('click', () => {
+    try{
+      const header = ['Taksit'].concat(BLOKAJ_KEYS.map(k => BLOKAJ_LABELS[k]));
+      const rows = [header];
+      for(let n=1; n<=12; n++){
+        rows.push([n].concat(BLOKAJ_KEYS.map(k => RATE_DEFAULTS[k][n])));
+      }
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [{wch:8}].concat(BLOKAJ_KEYS.map(()=>({wch:12})));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Şablon');
+      XLSX.writeFile(wb, 'kredi-karti-taksit-maliyeti-sablon.xlsx');
+      showIoMsg('Şablon indirildi. Doldurup "Excel\'den Yükle" ile geri yükleyebilirsiniz.');
+    } catch(e){ showIoMsg('Şablon oluşturulurken hata oluştu.', true); }
   });
 
   document.getElementById('importExcelInput').addEventListener('change', (e) => {

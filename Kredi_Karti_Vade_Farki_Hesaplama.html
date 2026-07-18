@@ -258,6 +258,7 @@
       <button type="button" class="io-btn" id="exportExcelBtn">⬇ Excel'e Aktar</button>
       <button type="button" class="io-btn" id="exportPdfBtn">⬇ PDF'e Aktar</button>
       <button type="button" class="io-btn" id="importExcelBtn">⬆ Excel'den Yükle</button>
+      <button type="button" class="io-btn" id="downloadTemplateBtn">📄 Şablonu İndir</button>
       <input type="file" id="importExcelInput" accept=".xlsx,.xls" style="display:none;">
     </div>
     <div class="io-msg" id="ioMsg"></div>
@@ -599,6 +600,21 @@
 
   document.getElementById('importExcelBtn').addEventListener('click', () => {
     document.getElementById('importExcelInput').click();
+  });
+
+  document.getElementById('downloadTemplateBtn').addEventListener('click', () => {
+    try{
+      const rows = [['Taksit', 'Vade (gün)', 'Ortalama Vade (gün)', 'Vade Farkı Oranı (%)']];
+      for(let n=1; n<=12; n++){
+        rows.push([n, DEFAULTS[n].vade, DEFAULTS[n].ort, DEFAULTS[n].oran]);
+      }
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [{wch:8},{wch:12},{wch:18},{wch:18}];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Şablon');
+      XLSX.writeFile(wb, 'kredi-karti-vade-farki-sablon.xlsx');
+      showIoMsg('Şablon indirildi. Doldurup "Excel\'den Yükle" ile geri yükleyebilirsiniz.');
+    } catch(e){ showIoMsg('Şablon oluşturulurken hata oluştu.', true); }
   });
 
   document.getElementById('importExcelInput').addEventListener('change', (e) => {

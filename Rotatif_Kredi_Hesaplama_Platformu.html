@@ -314,6 +314,7 @@
       <button type="button" class="io-btn" id="exportExcelBtn">⬇ Excel'e Aktar</button>
       <button type="button" class="io-btn" id="exportPdfBtn">⬇ PDF'e Aktar</button>
       <button type="button" class="io-btn" id="importExcelBtn">⬆ Excel'den Yükle</button>
+      <button type="button" class="io-btn" id="downloadTemplateBtn">📄 Şablonu İndir</button>
       <input type="file" id="importExcelInput" accept=".xlsx,.xls" style="display:none;">
     </div>
     <div class="io-msg" id="ioMsg"></div>
@@ -604,6 +605,22 @@ document.getElementById('exportPdfBtn').addEventListener('click', () => {
 
 document.getElementById('importExcelBtn').addEventListener('click', () => {
   document.getElementById('importExcelInput').click();
+});
+
+document.getElementById('downloadTemplateBtn').addEventListener('click', () => {
+  try{
+    const rows = [
+      ['Tutar','Vade (gün)','Oran %','Kom.Oran %'],
+      [9000000, 365, 45, 1],
+      [50000000, 30, 45, 1]
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:16},{wch:12},{wch:10},{wch:12}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Şablon');
+    XLSX.writeFile(wb, 'rotatif-kredi-sablon.xlsx');
+    showIoMsg('Şablon indirildi. Doldurup "Excel\'den Yükle" ile geri yükleyebilirsiniz.');
+  } catch(e){ showIoMsg('Şablon oluşturulurken hata oluştu.', true); }
 });
 
 document.getElementById('importExcelInput').addEventListener('change', (e) => {
