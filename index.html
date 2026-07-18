@@ -56,7 +56,7 @@
     display:flex; flex-direction:column; overflow-y:auto;
   }
   .brand{
-    padding:22px 24px 20px; border-bottom:1px solid var(--hairline); position:relative; overflow:hidden;
+    padding:32px 24px 20px; border-bottom:1px solid var(--hairline); position:relative; overflow:hidden;
   }
   .brand::before{
     content:''; position:absolute; top:-40px; left:-20px; width:160px; height:160px;
@@ -64,13 +64,13 @@
     pointer-events:none;
   }
   .brand-row{
-    display:block; margin-bottom:0; position:relative; text-align:center;
+    display:flex; align-items:center; gap:12px; margin-bottom:0; position:relative;
   }
-  .brand-row-logo{ height:264px; width:auto; max-width:100%; display:inline-block; object-fit:contain; filter:drop-shadow(0 4px 14px rgba(0,0,0,0.35)); }
+  .brand-row-logo{ height:56px; width:56px; border-radius:14px; object-fit:cover; display:inline-block; filter:drop-shadow(0 4px 14px rgba(0,0,0,0.35)); }
   .brand-row-fallback{
-    display:none; width:216px; height:216px; border-radius:32px; margin:0 auto;
+    display:none; width:56px; height:56px; border-radius:14px; margin:0;
     background:var(--grad); align-items:center; justify-content:center;
-    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:48px; color:#fff;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:22px; color:#fff;
     box-shadow:0 4px 14px rgba(0,0,0,0.35);
   }
   .brand-title{
@@ -626,11 +626,31 @@
   openTarget('home', 'Ana Sayfa');
 </script>
 
-<script>
-  // ---- Karşılama / Üyelik Ekranı ----
-  // NOT: Firebase bağlandığında signIn/signUp fonksiyonları gerçek Firebase
-  // Authentication çağrılarıyla değiştirilecek. Şimdilik arayüz + akış hazır.
+<script type="module">
+  // ---- Firebase ----
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+  import {
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+    signOut, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+  import {
+    getFirestore, doc, getDoc, setDoc, runTransaction, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 
+  const firebaseConfig = {
+    apiKey: "AIzaSyCWzcRqmwhIBqjnYqyMoIrO8zj2p8oj5kU",
+    authDomain: "mmgcreativity-31263.firebaseapp.com",
+    projectId: "mmgcreativity-31263",
+    storageBucket: "mmgcreativity-31263.firebasestorage.app",
+    messagingSenderId: "243143536600",
+    appId: "1:243143536600:web:daa53a2614b42a2ccb8cad",
+    measurementId: "G-X8HEZRNWWS"
+  };
+  const fbApp = initializeApp(firebaseConfig);
+  const auth = getAuth(fbApp);
+  const db = getFirestore(fbApp);
+
+  // ---- Karşılama / Üyelik Ekranı ----
   const authOverlay = document.getElementById('authOverlay');
   const authForm = document.getElementById('authForm');
   const authError = document.getElementById('authError');
@@ -674,7 +694,7 @@
     authOverlay.classList.remove('hidden');
   }
 
-  function updateUserBadge(){
+  function updateUserBadge(customerNumber){
     const state = localStorage.getItem('mmg_auth_state');
     const badge = document.getElementById('userBadge');
     const nameEl = document.getElementById('userBadgeName');
@@ -686,7 +706,9 @@
     if(state === 'guest'){
       nameEl.textContent = 'Misafir';
     } else if(state.startsWith('user:')){
-      nameEl.textContent = state.slice(5);
+      const email = state.slice(5);
+      const no = customerNumber || localStorage.getItem('mmg_customer_no');
+      nameEl.textContent = no ? (email + ' · No:' + no) : email;
     }
   }
 
@@ -698,6 +720,33 @@
     closeAuthOverlay();
   }
 
+  function mapFirebaseError(code){
+    const map = {
+      'auth/email-already-in-use': 'Bu e-posta adresi zaten kayıtlı. Giriş yapmayı deneyin.',
+      'auth/invalid-email': 'Geçerli bir e-posta adresi girin.',
+      'auth/weak-password': 'Şifre en az 6 karakter olmalı.',
+      'auth/user-not-found': 'Bu e-posta ile kayıtlı bir hesap bulunamadı.',
+      'auth/wrong-password': 'Şifre hatalı.',
+      'auth/invalid-credential': 'E-posta veya şifre hatalı.',
+      'auth/too-many-requests': 'Çok fazla deneme yapıldı. Lütfen biraz sonra tekrar deneyin.',
+      'auth/network-request-failed': 'Bağlantı hatası. İnternetinizi kontrol edin.'
+    };
+    return map[code] || 'Bir hata oluştu, lütfen tekrar deneyin.';
+  }
+
+  // Sıradaki müşteri numarasını atomik olarak üretir (1001'den başlar)
+  async function getNextCustomerNumber(){
+    const counterRef = doc(db, 'meta', 'counters');
+    const newNumber = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(counterRef);
+      const current = snap.exists() ? (snap.data().userCount || 1000) : 1000;
+      const next = current + 1;
+      tx.set(counterRef, { userCount: next }, { merge: true });
+      return next;
+    });
+    return newNumber;
+  }
+
   guestBtn.addEventListener('click', () => {
     localStorage.setItem('mmg_auth_state', 'guest');
     localStorage.setItem('mmg_remember', document.getElementById('rememberMe').checked ? '1' : '0');
@@ -705,41 +754,67 @@
     closeAuthOverlay();
   });
 
-  authForm.addEventListener('submit', (e) => {
+  authForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     hideAuthError();
     const email = document.getElementById('authEmail').value.trim();
     const password = document.getElementById('authPassword').value;
     const remember = document.getElementById('rememberMe').checked;
 
-    if(authMode === 'signup'){
-      const confirm = document.getElementById('authPasswordConfirm').value;
-      if(password !== confirm){
-        showAuthError('Şifreler eşleşmiyor.');
-        return;
+    authSubmitBtn.disabled = true;
+    const originalLabel = authSubmitBtn.textContent;
+    authSubmitBtn.textContent = 'Lütfen bekleyin...';
+
+    try{
+      if(authMode === 'signup'){
+        const confirm = document.getElementById('authPasswordConfirm').value;
+        if(password !== confirm){
+          showAuthError('Şifreler eşleşmiyor.');
+          return;
+        }
+        if(password.length < 6){
+          showAuthError('Şifre en az 6 karakter olmalı.');
+          return;
+        }
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        const customerNumber = await getNextCustomerNumber();
+        await setDoc(doc(db, 'users', cred.user.uid), {
+          email: email,
+          customerNumber: customerNumber,
+          createdAt: serverTimestamp()
+        });
+        localStorage.setItem('mmg_auth_state', 'user:' + email);
+        localStorage.setItem('mmg_customer_no', String(customerNumber));
+        localStorage.setItem('mmg_remember', remember ? '1' : '0');
+        updateUserBadge(customerNumber);
+        closeAuthOverlay();
+      } else {
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+        let customerNumber = null;
+        try{
+          const snap = await getDoc(doc(db, 'users', cred.user.uid));
+          if(snap.exists()) customerNumber = snap.data().customerNumber;
+        } catch(err){ /* profil okunamadıysa sessizce geç */ }
+        localStorage.setItem('mmg_auth_state', 'user:' + email);
+        if(customerNumber) localStorage.setItem('mmg_customer_no', String(customerNumber));
+        localStorage.setItem('mmg_remember', remember ? '1' : '0');
+        updateUserBadge(customerNumber);
+        closeAuthOverlay();
       }
-      if(password.length < 6){
-        showAuthError('Şifre en az 6 karakter olmalı.');
-        return;
-      }
-      // TODO: Firebase createUserWithEmailAndPassword(auth, email, password)
-      localStorage.setItem('mmg_auth_state', 'user:' + email);
-      localStorage.setItem('mmg_remember', remember ? '1' : '0');
-      updateUserBadge();
-      closeAuthOverlay();
-    } else {
-      // TODO: Firebase signInWithEmailAndPassword(auth, email, password)
-      localStorage.setItem('mmg_auth_state', 'user:' + email);
-      localStorage.setItem('mmg_remember', remember ? '1' : '0');
-      updateUserBadge();
-      closeAuthOverlay();
+    } catch(err){
+      showAuthError(mapFirebaseError(err.code));
+    } finally {
+      authSubmitBtn.disabled = false;
+      authSubmitBtn.textContent = originalLabel;
     }
   });
 
-  document.getElementById('logoutBtn').addEventListener('click', (e) => {
+  document.getElementById('logoutBtn').addEventListener('click', async (e) => {
     e.preventDefault();
+    try { await signOut(auth); } catch(err){ /* önemli değil */ }
     localStorage.removeItem('mmg_auth_state');
     localStorage.removeItem('mmg_remember');
+    localStorage.removeItem('mmg_customer_no');
     updateUserBadge();
     document.getElementById('authEmail').value = '';
     document.getElementById('authPassword').value = '';
@@ -763,6 +838,41 @@
     const isLight = document.documentElement.classList.contains('theme-light');
     applyTheme(isLight ? 'dark' : 'light');
   });
+</script>
+
+<button id="mmgScrollDownBtn" title="Aşağı kaydır" aria-label="Aşağı kaydır">↓</button>
+<style>
+  #mmgScrollDownBtn{
+    position:fixed; right:20px; bottom:20px; z-index:500;
+    width:44px; height:44px; border-radius:50%; border:1px solid var(--hairline,#2A3448);
+    background:var(--surface-2,#1B2536); color:var(--brass,#C6A15B);
+    font-size:20px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 8px 20px rgba(0,0,0,0.35); transition:opacity .2s ease, transform .2s ease;
+    opacity:0; pointer-events:none;
+  }
+  #mmgScrollDownBtn.show{ opacity:1; pointer-events:auto; }
+  #mmgScrollDownBtn:hover{ transform:translateY(2px); }
+</style>
+<script>
+(function(){
+  var btn = document.getElementById('mmgScrollDownBtn');
+  function nearBottom(){
+    return (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 40);
+  }
+  function updateVisibility(){
+    if(document.body.scrollHeight <= window.innerHeight + 60 || nearBottom()){
+      btn.classList.remove('show');
+    } else {
+      btn.classList.add('show');
+    }
+  }
+  btn.addEventListener('click', function(){
+    window.scrollBy({ top: window.innerHeight * 0.85, behavior: 'smooth' });
+  });
+  window.addEventListener('scroll', updateVisibility);
+  window.addEventListener('resize', updateVisibility);
+  updateVisibility();
+})();
 </script>
 
 </body>
